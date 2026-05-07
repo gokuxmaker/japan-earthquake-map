@@ -10,24 +10,19 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'Exo 2',sans-serif;color:#000}
 .page{width:800px;height:480px;display:grid;grid-template-columns:340px 1fr;border:4px solid #000}
-
 .map-panel{border-right:3px solid #000;display:flex;flex-direction:column;background:#fff}
 .map-header{background:#000;color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .map-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:900;letter-spacing:2px}
 .map-time{font-size:11px;font-weight:800;color:#ccc}
 #map{flex:1;min-height:0}
 .map-footer{padding:5px 10px;border-top:2.5px solid #000;font-size:12px;font-weight:900;flex-shrink:0;background:#fff;display:flex;gap:12px;align-items:center}
-
-/* greyscale tiles — works on any tile provider */
 .leaflet-tile{filter:grayscale(100%) contrast(1.15) brightness(1.05) !important}
 .leaflet-control-zoom,.leaflet-control-attribution{display:none !important}
-
 .data-panel{background:#fff;display:flex;flex-direction:column}
 .data-header{background:#000;color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .monitor-label{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;letter-spacing:3px}
 .live-badge{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;display:flex;align-items:center;gap:6px}
 .live-dot{width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #888}
-
 .main-quake{padding:10px 14px;border-bottom:3px solid #000;flex-shrink:0}
 .mag-row{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
 .mag-label{font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase}
@@ -36,12 +31,10 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 .quake-location{font-size:15px;font-weight:900;margin-bottom:3px;line-height:1.25}
 .quake-meta{display:flex;gap:14px}
 .quake-time,.quake-depth{font-size:13px;font-weight:900}
-
 .scale-section{padding:7px 14px;border-bottom:3px solid #000;flex-shrink:0}
 .section-label{font-size:10px;font-weight:900;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px}
 .scale-bar{display:flex;height:18px;border:2.5px solid #000;border-radius:2px;overflow:hidden}
 .scale-seg{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#fff;flex:1}
-
 .recent-section{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .recent-label{padding:6px 14px 4px;font-size:10px;font-weight:900;letter-spacing:3px;text-transform:uppercase;border-bottom:2px solid #000;flex-shrink:0}
 .quake-list{flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:4px 14px 8px}
@@ -68,7 +61,6 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
     <div id="map"></div>
     <div class="map-footer">● Dot size = magnitude &nbsp;|&nbsp; <span style="font-size:10px;font-weight:800">© OpenStreetMap</span></div>
   </div>
-
   <div class="data-panel">
     <div class="data-header">
       <span class="monitor-label">EARTHQUAKE MONITOR</span>
@@ -106,9 +98,11 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+// Zoom 4 = wider view showing Japan + surrounding sea like the reference image
+// Centre pulled slightly south-west so Japan sits nicely in the panel
 const map = L.map('map', {
-  center: [37.0, 137.0],
-  zoom: 5,
+  center: [35.5, 136.0],
+  zoom: 4,
   zoomControl: false,
   attributionControl: false,
   scrollWheelZoom: false,
@@ -117,7 +111,6 @@ const map = L.map('map', {
   touchZoom: false
 });
 
-// OpenStreetMap standard tiles — completely free, no API key ever needed
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   crossOrigin: true
@@ -131,8 +124,9 @@ function ago(ms){
   return Math.round(s/86400)+'d ago';
 }
 
-// radius in metres scales with magnitude
-function magM(m){ return Math.max(12000, Math.round(7000*Math.pow(m,2.2))); }
+// Much smaller radius — zoom 4 map needs smaller circles
+// M1.5→8km  M3→18km  M5→40km  M7→80km
+function magM(m){ return Math.max(8000, Math.round(3500*Math.pow(m,1.8))); }
 
 const layers=[];
 
@@ -160,7 +154,7 @@ async function load(){
         color:'#000',
         weight: i===0?3:2,
         fillColor:'#000',
-        fillOpacity: i===0?0.85:0.4
+        fillOpacity: i===0?0.85:0.45
       }).addTo(map);
       layers.push(c);
     });
