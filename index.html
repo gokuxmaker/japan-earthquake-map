@@ -9,6 +9,22 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'Exo 2',sans-serif;color:#000}
+
+/* ── FULL SCREEN COVER — shown until everything is ready ── */
+#cover{
+  position:fixed;inset:0;z-index:9999;
+  background:#fff;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:18px;
+}
+#cover.hidden{display:none}
+.cover-title{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;letter-spacing:3px;color:#000}
+.cover-sub{font-size:14px;font-weight:900;color:#555;letter-spacing:1px}
+/* simple progress bar */
+.prog-wrap{width:300px;height:14px;border:3px solid #000;border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;background:#000;width:0%;transition:width 0.2s}
+
 .page{width:800px;height:480px;display:grid;grid-template-columns:340px 1fr;border:4px solid #000}
 .map-panel{border-right:3px solid #000;display:flex;flex-direction:column;background:#fff}
 .map-header{background:#000;color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
@@ -18,6 +34,7 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 .map-footer{padding:5px 10px;border-top:2.5px solid #000;font-size:12px;font-weight:900;flex-shrink:0;background:#fff;display:flex;gap:12px;align-items:center}
 .leaflet-tile{filter:grayscale(100%) contrast(1.15) brightness(1.05) !important}
 .leaflet-control-zoom,.leaflet-control-attribution{display:none !important}
+
 .data-panel{background:#fff;display:flex;flex-direction:column}
 .data-header{background:#000;color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .monitor-label{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;letter-spacing:3px}
@@ -48,10 +65,17 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 .q-mbar{width:50px;flex-shrink:0}
 .q-mbar-track{height:10px;border:2px solid #000;border-radius:2px;overflow:hidden;background:#eee}
 .q-mbar-fill{height:100%;background:#000}
-.no-data{padding:20px;font-size:14px;font-weight:900;color:#555;text-align:center}
 </style>
 </head>
 <body>
+
+<!-- Cover shown while loading — hidden once map tiles + data are ready -->
+<div id="cover">
+  <div class="cover-title">JAPAN SEISMIC MONITOR</div>
+  <div class="cover-sub" id="cover-status">Fetching earthquake data...</div>
+  <div class="prog-wrap"><div class="prog-fill" id="prog"></div></div>
+</div>
+
 <div class="page">
   <div class="map-panel">
     <div class="map-header">
@@ -72,7 +96,7 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
         <span class="mag-value" id="main-mag">—</span>
         <span class="mag-unit">M</span>
       </div>
-      <div class="quake-location" id="main-loc">Loading data...</div>
+      <div class="quake-location" id="main-loc">—</div>
       <div class="quake-meta">
         <span class="quake-time" id="main-time"></span>
         <span class="quake-depth" id="main-depth"></span>
@@ -91,30 +115,20 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
     </div>
     <div class="recent-section">
       <div class="recent-label">Recent Earthquakes — Japan Region</div>
-      <div class="quake-list" id="quake-list"><div class="no-data">Fetching...</div></div>
+      <div class="quake-list" id="quake-list"></div>
     </div>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-// Zoom 4 = wider view showing Japan + surrounding sea like the reference image
-// Centre pulled slightly south-west so Japan sits nicely in the panel
-const map = L.map('map', {
-  center: [35.5, 136.0],
-  zoom: 4,
-  zoomControl: false,
-  attributionControl: false,
-  scrollWheelZoom: false,
-  dragging: false,
-  doubleClickZoom: false,
-  touchZoom: false
-});
+const prog = document.getElementById('prog');
+const coverStatus = document.getElementById('cover-status');
 
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  crossOrigin: true
-}).addTo(map);
+function setProgress(pct, label) {
+  prog.style.width = pct + '%';
+  if (label) coverStatus.textContent = label;
+}
 
 function ago(ms){
   const s=(Date.now()-ms)/1000;
@@ -123,56 +137,85 @@ function ago(ms){
   if(s<86400)return Math.round(s/3600)+'h ago';
   return Math.round(s/86400)+'d ago';
 }
-
-// Much smaller radius — zoom 4 map needs smaller circles
-// M1.5→8km  M3→18km  M5→40km  M7→80km
 function magM(m){ return Math.max(8000, Math.round(3500*Math.pow(m,1.8))); }
 
-const layers=[];
+async function init() {
+  // Step 1: fetch earthquake data first
+  setProgress(10, 'Fetching earthquake data...');
+  let qs = [];
+  try {
+    const res = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6');
+    const data = await res.json();
+    qs = data.features || [];
+  } catch(e) {
+    coverStatus.textContent = 'Data error — retrying...';
+  }
 
-async function load(){
-  try{
-    const res=await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6');
-    const data=await res.json();
-    const qs=data.features||[];
+  setProgress(40, 'Building map...');
 
-    if(!qs.length){
-      document.getElementById('main-loc').textContent='No recent earthquakes';
-      document.getElementById('quake-list').innerHTML='<div class="no-data">No data.</div>';
-      return;
+  // Step 2: init Leaflet map
+  const map = L.map('map', {
+    center: [35.5, 136.0],
+    zoom: 4,
+    zoomControl: false,
+    attributionControl: false,
+    scrollWheelZoom: false,
+    dragging: false,
+    doubleClickZoom: false,
+    touchZoom: false
+  });
+
+  const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    crossOrigin: true
+  }).addTo(map);
+
+  setProgress(60, 'Loading map tiles...');
+
+  // Step 3: wait for tiles to fully load
+  await new Promise(resolve => {
+    if (map._loaded) {
+      // give tiles a moment to render
+      tileLayer.once('load', resolve);
+      setTimeout(resolve, 4000); // max wait 4s
+    } else {
+      tileLayer.once('load', resolve);
+      setTimeout(resolve, 4000);
     }
+  });
 
-    layers.forEach(l=>map.removeLayer(l));
-    layers.length=0;
+  setProgress(85, 'Placing earthquake markers...');
 
-    qs.forEach((q,i)=>{
-      const lat=q.geometry.coordinates[1];
-      const lon=q.geometry.coordinates[0];
-      const mag=parseFloat(q.properties.mag);
-      const c=L.circle([lat,lon],{
+  // Step 4: populate all data into the DOM
+  if (qs.length) {
+    // place circles on map
+    qs.forEach((q, i) => {
+      const lat = q.geometry.coordinates[1];
+      const lon = q.geometry.coordinates[0];
+      const mag = parseFloat(q.properties.mag);
+      L.circle([lat, lon], {
         radius: magM(mag),
-        color:'#000',
-        weight: i===0?3:2,
-        fillColor:'#000',
-        fillOpacity: i===0?0.85:0.45
+        color: '#000',
+        weight: i === 0 ? 3 : 2,
+        fillColor: '#000',
+        fillOpacity: i === 0 ? 0.85 : 0.45
       }).addTo(map);
-      layers.push(c);
     });
 
-    const t=qs[0];
-    const mag=parseFloat(t.properties.mag);
-    const dep=parseFloat(t.geometry.coordinates[2]).toFixed(0);
-    document.getElementById('main-mag').textContent=mag.toFixed(1);
-    document.getElementById('main-loc').textContent=t.properties.place||'Japan Region';
-    document.getElementById('main-time').textContent=ago(t.properties.time);
-    document.getElementById('main-depth').textContent='Depth: '+dep+' km';
-    document.getElementById('map-time').textContent=new Date(t.properties.time)
+    const t   = qs[0];
+    const mag = parseFloat(t.properties.mag);
+    const dep = parseFloat(t.geometry.coordinates[2]).toFixed(0);
+    document.getElementById('main-mag').textContent   = mag.toFixed(1);
+    document.getElementById('main-loc').textContent   = t.properties.place || 'Japan Region';
+    document.getElementById('main-time').textContent  = ago(t.properties.time);
+    document.getElementById('main-depth').textContent = 'Depth: ' + dep + ' km';
+    document.getElementById('map-time').textContent   = new Date(t.properties.time)
       .toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 
-    document.getElementById('quake-list').innerHTML=qs.map((q,i)=>{
-      const m=parseFloat(q.properties.mag);
-      const pct=Math.min(100,(m/8)*100);
-      const d=parseFloat(q.geometry.coordinates[2]).toFixed(0);
+    document.getElementById('quake-list').innerHTML = qs.map((q, i) => {
+      const m   = parseFloat(q.properties.mag);
+      const pct = Math.min(100,(m/8)*100);
+      const d   = parseFloat(q.geometry.coordinates[2]).toFixed(0);
       return '<div class="q-row">'
         +'<div class="q-num">'+(i+1)+'</div>'
         +'<div class="q-mag">'+m.toFixed(1)+'</div>'
@@ -183,13 +226,18 @@ async function load(){
         +'<div class="q-mbar"><div class="q-mbar-track"><div class="q-mbar-fill" style="width:'+pct+'%"></div></div></div>'
       +'</div>';
     }).join('');
-
-  }catch(e){
-    document.getElementById('main-loc').textContent='Connection error';
-    document.getElementById('quake-list').innerHTML='<div class="no-data">Could not load data.</div>';
+  } else {
+    document.getElementById('main-loc').textContent = 'No recent earthquakes found';
   }
+
+  setProgress(100, 'Ready');
+
+  // Step 5: small pause then reveal — e-ink needs a clean single frame
+  await new Promise(r => setTimeout(r, 300));
+  document.getElementById('cover').classList.add('hidden');
 }
-load();
+
+init();
 </script>
 </body>
 </html>
