@@ -4,30 +4,18 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=800"/>
 <title>Japan Earthquake Monitor</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@800;900&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'Exo 2',sans-serif;color:#000}
-
-/* page hidden until JS reveals it */
-.page{
-  width:800px;height:480px;
-  display:grid;grid-template-columns:340px 1fr;
-  border:4px solid #000;
-  visibility:hidden;
-}
-.page.ready{visibility:visible}
-
+.page{width:800px;height:480px;display:grid;grid-template-columns:340px 1fr;border:4px solid #000}
 .map-panel{border-right:3px solid #000;display:flex;flex-direction:column;background:#fff}
 .map-header{background:#000;color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .map-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:900;letter-spacing:2px}
 .map-time{font-size:11px;font-weight:800;color:#ccc}
-#map{flex:1;min-height:0}
-.map-footer{padding:5px 10px;border-top:2.5px solid #000;font-size:12px;font-weight:900;flex-shrink:0;background:#fff;display:flex;gap:12px;align-items:center}
-.leaflet-tile{filter:grayscale(100%) contrast(1.15) brightness(1.05) !important}
-.leaflet-control-zoom,.leaflet-control-attribution{display:none !important}
-
+.map-wrap{flex:1;position:relative;overflow:hidden;background:#fff}
+#japan-svg{width:100%;height:100%;display:block}
+.map-footer{padding:5px 10px;border-top:2.5px solid #000;font-size:12px;font-weight:900;flex-shrink:0;background:#fff}
 .data-panel{background:#fff;display:flex;flex-direction:column}
 .data-header{background:#000;color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .monitor-label{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;letter-spacing:3px}
@@ -58,17 +46,54 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 .q-mbar{width:50px;flex-shrink:0}
 .q-mbar-track{height:10px;border:2px solid #000;border-radius:2px;overflow:hidden;background:#eee}
 .q-mbar-fill{height:100%;background:#000}
+.err{padding:10px 14px;font-size:13px;font-weight:900;color:#555}
 </style>
 </head>
 <body>
-<div class="page" id="page">
+<div class="page">
   <div class="map-panel">
     <div class="map-header">
       <span class="map-title">JAPAN SEISMIC MAP</span>
-      <span class="map-time" id="map-time">—</span>
+      <span class="map-time" id="map-time"></span>
     </div>
-    <div id="map"></div>
-    <div class="map-footer">● Dot size = magnitude &nbsp;|&nbsp; <span style="font-size:10px;font-weight:800">© OpenStreetMap</span></div>
+    <div class="map-wrap">
+      <!-- Inline SVG Japan outline — zero network, paints instantly -->
+      <svg id="japan-svg" viewBox="0 0 340 420" xmlns="http://www.w3.org/2000/svg">
+        <rect width="340" height="420" fill="#f8f8f8"/>
+        <!-- sea label -->
+        <text x="80" y="200" font-size="11" fill="#bbb" font-family="Exo 2,sans-serif" font-weight="800">Sea of Japan</text>
+        <!-- Hokkaido -->
+        <path fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"
+          d="M218,22 L228,18 L241,17 L253,20 L261,28 L264,38 L260,48 L251,55 L239,58 L227,56 L217,49 L212,39 L214,29Z
+             M200,55 L210,49 L220,50 L228,56 L232,65 L230,74 L223,80 L213,82 L204,77 L198,69 L198,60Z"/>
+        <!-- Honshu -->
+        <path fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"
+          d="M198,60 L204,77 L213,82 L220,88 L224,97 L222,107 L216,115 L207,120 L196,123 L184,122 L173,118 L163,111
+             L156,102 L152,92 L153,82 L158,73 L166,66 L175,62 L186,60Z
+             M152,92 L146,100 L140,109 L133,117 L124,123 L114,126 L103,125 L93,121 L85,114 L80,105 L78,95
+             L80,85 L86,76 L95,69 L105,64 L116,62 L127,63 L136,67 L143,74 L148,83Z
+             M78,95 L73,104 L69,114 L67,124 L68,135 L72,145 L79,153 L88,159 L99,163 L109,164
+             L119,162 L128,157 L135,150 L139,141 L141,131 L139,120 L135,110"/>
+        <!-- Kyushu -->
+        <path fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"
+          d="M69,204 L77,199 L87,198 L96,202 L102,209 L104,218 L100,226 L92,231 L82,232 L73,227 L67,219 L67,210Z"/>
+        <!-- Shikoku -->
+        <path fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"
+          d="M99,174 L109,170 L120,170 L130,174 L136,182 L134,191 L126,197 L115,199 L104,196 L97,188 L96,179Z"/>
+        <!-- city dots -->
+        <circle cx="196" cy="122" r="3.5" fill="#000"/>
+        <text x="200" y="120" font-size="10" font-weight="900" font-family="Exo 2,sans-serif" fill="#000">Tokyo</text>
+        <circle cx="152" cy="152" r="2.5" fill="#555"/>
+        <text x="130" y="150" font-size="9" font-weight="800" font-family="Exo 2,sans-serif" fill="#555">Osaka</text>
+        <circle cx="84" cy="218" r="2.5" fill="#555"/>
+        <text x="62" y="216" font-size="9" font-weight="800" font-family="Exo 2,sans-serif" fill="#555">Fukuoka</text>
+        <circle cx="238" cy="36" r="2.5" fill="#555"/>
+        <text x="242" y="34" font-size="9" font-weight="800" font-family="Exo 2,sans-serif" fill="#555">Sapporo</text>
+        <!-- earthquake dots injected here by JS -->
+        <g id="eq-dots"></g>
+      </svg>
+    </div>
+    <div class="map-footer">● Dot size = magnitude</div>
   </div>
   <div class="data-panel">
     <div class="data-header">
@@ -105,8 +130,20 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+// Geo → SVG coordinate mapping
+// SVG viewBox 0 0 340 420  |  Japan bounds lat 24-46, lon 122-146
+const GEO={minLat:24,maxLat:46,minLon:122,maxLon:146};
+const SVG={w:340,h:420,padL:0.08,padR:0.08,padT:0.05,padB:0.08};
+function toSVG(lat,lon){
+  const gx=(lon-GEO.minLon)/(GEO.maxLon-GEO.minLon);
+  const gy=(GEO.maxLat-lat)/(GEO.maxLat-GEO.minLat);
+  return{
+    x:(SVG.padL+gx*(1-SVG.padL-SVG.padR))*SVG.w,
+    y:(SVG.padT+gy*(1-SVG.padT-SVG.padB))*SVG.h
+  };
+}
+function dotR(m){return Math.max(5,Math.round(2.8*Math.pow(m,1.6)));}
 function ago(ms){
   const s=(Date.now()-ms)/1000;
   if(s<60)return Math.round(s)+'s ago';
@@ -114,40 +151,44 @@ function ago(ms){
   if(s<86400)return Math.round(s/3600)+'h ago';
   return Math.round(s/86400)+'d ago';
 }
-function magM(m){return Math.max(8000,Math.round(3500*Math.pow(m,1.8)));}
 
-async function init(){
-  // fetch data and init map in parallel
-  const [dataResult] = await Promise.all([
-    fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6')
-      .then(r=>r.json()).catch(()=>({features:[]}))
-  ]);
+// Fetch and render — everything in one async call, no waiting
+fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6')
+  .then(r=>r.json())
+  .then(data=>{
+    const qs=data.features||[];
+    if(!qs.length)return;
 
-  const qs = dataResult.features || [];
-
-  // init map
-  const map = L.map('map',{
-    center:[35.5,136.0],zoom:4,
-    zoomControl:false,attributionControl:false,
-    scrollWheelZoom:false,dragging:false,
-    doubleClickZoom:false,touchZoom:false
-  });
-
-  const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19,crossOrigin:true
-  }).addTo(map);
-
-  // fill all DOM immediately
-  if(qs.length){
+    // dots on SVG map
+    const g=document.getElementById('eq-dots');
     qs.forEach((q,i)=>{
-      L.circle([q.geometry.coordinates[1],q.geometry.coordinates[0]],{
-        radius:magM(parseFloat(q.properties.mag)),
-        color:'#000',weight:i===0?3:2,
-        fillColor:'#000',fillOpacity:i===0?0.85:0.45
-      }).addTo(map);
+      const lat=q.geometry.coordinates[1],lon=q.geometry.coordinates[0];
+      const mag=parseFloat(q.properties.mag);
+      const{x,y}=toSVG(lat,lon);
+      const r=dotR(mag);
+      const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx',x.toFixed(1));
+      c.setAttribute('cy',y.toFixed(1));
+      c.setAttribute('r',r);
+      c.setAttribute('fill','#000');
+      c.setAttribute('fill-opacity',i===0?'0.9':'0.5');
+      c.setAttribute('stroke','#000');
+      c.setAttribute('stroke-width','1.5');
+      g.appendChild(c);
+      // number label
+      const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x',(x+r+3).toFixed(1));
+      txt.setAttribute('y',(y+4).toFixed(1));
+      txt.setAttribute('font-size','11');
+      txt.setAttribute('font-weight','900');
+      txt.setAttribute('font-family','Exo 2,sans-serif');
+      txt.setAttribute('fill','#000');
+      txt.textContent=String(i+1);
+      g.appendChild(txt);
     });
 
-    const t=qs[0], mag=parseFloat(t.properties.mag), dep=parseFloat(t.geometry.coordinates[2]).toFixed(0);
+    // main quake panel
+    const t=qs[0],mag=parseFloat(t.properties.mag),dep=parseFloat(t.geometry.coordinates[2]).toFixed(0);
     document.getElementById('main-mag').textContent=mag.toFixed(1);
     document.getElementById('main-loc').textContent=t.properties.place||'Japan Region';
     document.getElementById('main-time').textContent=ago(t.properties.time);
@@ -155,6 +196,7 @@ async function init(){
     document.getElementById('map-time').textContent=new Date(t.properties.time)
       .toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 
+    // list
     document.getElementById('quake-list').innerHTML=qs.map((q,i)=>{
       const m=parseFloat(q.properties.mag),pct=Math.min(100,(m/8)*100),d=parseFloat(q.geometry.coordinates[2]).toFixed(0);
       return '<div class="q-row">'
@@ -167,19 +209,10 @@ async function init(){
         +'<div class="q-mbar"><div class="q-mbar-track"><div class="q-mbar-fill" style="width:'+pct+'%"></div></div></div>'
       +'</div>';
     }).join('');
-  } else {
-    document.getElementById('main-loc').textContent='No recent earthquakes';
-  }
-
-  // wait for tiles then reveal everything at once
-  tiles.once('load', ()=>{
-    document.getElementById('page').classList.add('ready');
+  })
+  .catch(()=>{
+    document.getElementById('main-loc').textContent='No connection';
   });
-  // fallback — show after 5s even if tiles are slow
-  setTimeout(()=>document.getElementById('page').classList.add('ready'), 5000);
-}
-
-init();
 </script>
 </body>
 </html>
