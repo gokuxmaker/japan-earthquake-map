@@ -11,7 +11,6 @@
 html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'Exo 2',sans-serif;color:#000}
 .page{width:800px;height:480px;display:grid;grid-template-columns:340px 1fr;border:4px solid #000}
 
-/* MAP PANEL */
 .map-panel{border-right:3px solid #000;display:flex;flex-direction:column;background:#fff}
 .map-header{background:#000;color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .map-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:900;letter-spacing:2px}
@@ -19,12 +18,10 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 #map{flex:1;min-height:0}
 .map-footer{padding:5px 10px;border-top:2.5px solid #000;font-size:12px;font-weight:900;flex-shrink:0;background:#fff;display:flex;gap:12px;align-items:center}
 
-/* force Leaflet tiles to greyscale — perfect for e-ink */
-.leaflet-tile{filter:grayscale(100%) contrast(1.1) !important}
-/* hide Leaflet controls — not needed for e-ink display */
+/* greyscale tiles — works on any tile provider */
+.leaflet-tile{filter:grayscale(100%) contrast(1.15) brightness(1.05) !important}
 .leaflet-control-zoom,.leaflet-control-attribution{display:none !important}
 
-/* DATA PANEL */
 .data-panel{background:#fff;display:flex;flex-direction:column}
 .data-header{background:#000;color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .monitor-label{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;letter-spacing:3px}
@@ -63,21 +60,15 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 </head>
 <body>
 <div class="page">
-
-  <!-- LEFT: MAP -->
   <div class="map-panel">
     <div class="map-header">
       <span class="map-title">JAPAN SEISMIC MAP</span>
       <span class="map-time" id="map-time">—</span>
     </div>
     <div id="map"></div>
-    <div class="map-footer">
-      <span>● Dot size = magnitude</span>
-      <span style="font-size:10px;color:#555">© OpenStreetMap</span>
-    </div>
+    <div class="map-footer">● Dot size = magnitude &nbsp;|&nbsp; <span style="font-size:10px;font-weight:800">© OpenStreetMap</span></div>
   </div>
 
-  <!-- RIGHT: DATA -->
   <div class="data-panel">
     <div class="data-header">
       <span class="monitor-label">EARTHQUAKE MONITOR</span>
@@ -115,7 +106,6 @@ html,body{width:800px;height:480px;overflow:hidden;background:#fff;font-family:'
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-// Initialise Leaflet map centred on Japan, zoom level shows whole country
 const map = L.map('map', {
   center: [37.0, 137.0],
   zoom: 5,
@@ -127,9 +117,10 @@ const map = L.map('map', {
   touchZoom: false
 });
 
-// Stadia Alidade Smooth — clean greyscale, no API key needed
-L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-  maxZoom: 20
+// OpenStreetMap standard tiles — completely free, no API key ever needed
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  crossOrigin: true
 }).addTo(map);
 
 function ago(ms){
@@ -140,16 +131,16 @@ function ago(ms){
   return Math.round(s/86400)+'d ago';
 }
 
-// Circle radius in metres — scales strongly with magnitude
-function magMetres(m){ return Math.max(15000, Math.round(8000 * Math.pow(m, 2.2))); }
+// radius in metres scales with magnitude
+function magM(m){ return Math.max(12000, Math.round(7000*Math.pow(m,2.2))); }
 
-const layers = [];
+const layers=[];
 
 async function load(){
   try{
-    const res = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6');
-    const data = await res.json();
-    const qs = data.features || [];
+    const res=await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146&minmagnitude=1.5&orderby=time&limit=6');
+    const data=await res.json();
+    const qs=data.features||[];
 
     if(!qs.length){
       document.getElementById('main-loc').textContent='No recent earthquakes';
@@ -157,45 +148,37 @@ async function load(){
       return;
     }
 
-    // clear old circles
     layers.forEach(l=>map.removeLayer(l));
     layers.length=0;
 
-    // plot all 6 as filled black circles — size by magnitude
     qs.forEach((q,i)=>{
-      const lat = q.geometry.coordinates[1];
-      const lon = q.geometry.coordinates[0];
-      const mag = parseFloat(q.properties.mag);
-      const r   = magMetres(mag);
-      const isLatest = (i===0);
-
-      const circle = L.circle([lat,lon],{
-        radius: r,
-        color: '#000',
-        weight: isLatest ? 3 : 2,
-        fillColor: '#000',
-        fillOpacity: isLatest ? 0.9 : 0.45
+      const lat=q.geometry.coordinates[1];
+      const lon=q.geometry.coordinates[0];
+      const mag=parseFloat(q.properties.mag);
+      const c=L.circle([lat,lon],{
+        radius: magM(mag),
+        color:'#000',
+        weight: i===0?3:2,
+        fillColor:'#000',
+        fillOpacity: i===0?0.85:0.4
       }).addTo(map);
-
-      layers.push(circle);
+      layers.push(c);
     });
 
-    // fill right panel with latest quake
-    const t   = qs[0];
-    const mag = parseFloat(t.properties.mag);
-    const dep = parseFloat(t.geometry.coordinates[2]).toFixed(0);
-    document.getElementById('main-mag').textContent  = mag.toFixed(1);
-    document.getElementById('main-loc').textContent  = t.properties.place || 'Japan Region';
-    document.getElementById('main-time').textContent = ago(t.properties.time);
-    document.getElementById('main-depth').textContent= 'Depth: '+dep+' km';
-    document.getElementById('map-time').textContent  = new Date(t.properties.time)
+    const t=qs[0];
+    const mag=parseFloat(t.properties.mag);
+    const dep=parseFloat(t.geometry.coordinates[2]).toFixed(0);
+    document.getElementById('main-mag').textContent=mag.toFixed(1);
+    document.getElementById('main-loc').textContent=t.properties.place||'Japan Region';
+    document.getElementById('main-time').textContent=ago(t.properties.time);
+    document.getElementById('main-depth').textContent='Depth: '+dep+' km';
+    document.getElementById('map-time').textContent=new Date(t.properties.time)
       .toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 
-    // numbered list matching map circles
-    document.getElementById('quake-list').innerHTML = qs.map((q,i)=>{
-      const m   = parseFloat(q.properties.mag);
-      const pct = Math.min(100,(m/8)*100);
-      const d   = parseFloat(q.geometry.coordinates[2]).toFixed(0);
+    document.getElementById('quake-list').innerHTML=qs.map((q,i)=>{
+      const m=parseFloat(q.properties.mag);
+      const pct=Math.min(100,(m/8)*100);
+      const d=parseFloat(q.geometry.coordinates[2]).toFixed(0);
       return '<div class="q-row">'
         +'<div class="q-num">'+(i+1)+'</div>'
         +'<div class="q-mag">'+m.toFixed(1)+'</div>'
@@ -212,7 +195,6 @@ async function load(){
     document.getElementById('quake-list').innerHTML='<div class="no-data">Could not load data.</div>';
   }
 }
-
 load();
 </script>
 </body>
