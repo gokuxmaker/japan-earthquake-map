@@ -144,7 +144,7 @@ function toSVG(lat, lon){
   return { x: AX*lon + BX, y: AY*lat + BY };
 }
 
-function dotR(m){ return Math.max(4, Math.round(2.5*Math.pow(m,1.7))); }
+function dotR(m){ return Math.max(2, Math.round(1.25*Math.pow(m,1.7))); }
 
 function ago(ms){
   const s=(Date.now()-ms)/1000;
